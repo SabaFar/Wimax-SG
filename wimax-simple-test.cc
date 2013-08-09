@@ -79,14 +79,14 @@ ApplicationContainer clientAppsDL[MAX_USERS];
 IpcsClassifierRecord DlClassifierUgs[MAX_USERS];
 ServiceFlow DlServiceFlowUgs[MAX_USERS];
 
-void NodeConfigurationCommonSetup(WimaxHelper &wimax, int numUsers, InternetStackHelper &stack, Ipv4AddressHelper &address, WimaxHelper::SchedulerType scheduler, /*inputs*/
+void NodeConfigurationCommonSetupUDP(WimaxHelper &wimax, int numUsers, InternetStackHelper &stack, Ipv4AddressHelper &address, WimaxHelper::SchedulerType scheduler, /*inputs*/
 		NodeContainer &ssNodes, Ptr<SubscriberStationNetDevice> *ss, Ipv4InterfaceContainer &SSinterfaces /*outputs*/)
 {
 	/*------------------------------*/
 	//For each application, we need to create common variables here (common part between UL and DL of each application):
 	//ssNodes = new NodeContainer;
 	ssNodes.Create (numUsers);
-	NS_LOG_UNCOND("@NodeConfigurationCommonSetup:" << numUsers << "==" << ssNodes.GetN ());
+	NS_LOG_UNCOND("@NodeConfigurationCommonSetupUDP:" << numUsers << "==" << ssNodes.GetN ());
 	NetDeviceContainer ssDevs;
 	ssDevs = wimax.Install (ssNodes,
 						  WimaxHelper::DEVICE_TYPE_SUBSCRIBER_STATION,
@@ -96,54 +96,56 @@ void NodeConfigurationCommonSetup(WimaxHelper &wimax, int numUsers, InternetStac
 	SSinterfaces = address.Assign (ssDevs);
 	for (int i = 0; i < numUsers; i++)
 	{
+	  NS_LOG_UNCOND("@NodeConfigurationCommonSetupUDP:LOOP#" << i);
 	  ss[i] = ssDevs.Get (i)->GetObject<SubscriberStationNetDevice> ();
 	  ss[i]->SetModulationType (WimaxPhy::MODULATION_TYPE_QAM16_12);
 	}
 	//NS_LOG_UNCOND("SSinterfaces 0:" << SSinterfaces.GetAddress(0));
 }
 
-//TCP Traffic
-int Uplink_TCP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration, Ipv4InterfaceContainer BSinterface, Ipv4InterfaceContainer SSinterfaces, int &created_nodes,
-		NodeContainer bsNodes, NodeContainer ssNodes , Ptr<SubscriberStationNetDevice> ss[], std::string on_time, std::string off_time, int fid, ServiceFlow::SchedulingType  schedulinType,
-		std::string data_rate, uint32_t pktSize)
+void NodeConfigurationCommonSetupTCP(WimaxHelper &wimax, int numUsers, int &created_nodes, InternetStackHelper &stack, Ipv4AddressHelper &address, WimaxHelper::SchedulerType scheduler,
+		NetDeviceContainer bsDevs, NodeContainer bsNodes, /*inputs*/
+		NodeContainer &ssNodes, Ptr<SubscriberStationNetDevice> ss[], std::vector<Ipv4InterfaceContainer> &MoninterfaceAdjacencyList) //Ipv4InterfaceContainer &SSinterfaces /*outputs*/)
 {
-	port+=10;
-	//Collect an adjacency list of nodes for the p2p topology
+	ssNodes.Create (numUsers);
+	stack.Install (ssNodes);
 	std::vector<NodeContainer> MonnodeAdjacencyList (numUsers);
+	NS_LOG_UNCOND("@NodeConfigurationCommonSetupTCP:" << numUsers << "==" << MonnodeAdjacencyList.size () << "==" << ssNodes.GetN () );
 	for(uint32_t i=0; i<MonnodeAdjacencyList.size (); ++i)
 	{
+		NS_LOG_UNCOND("A#"<<i);
 		MonnodeAdjacencyList[i] = NodeContainer (bsNodes, ssNodes.Get (i));
 	}
 
-	OnOffHelper MonclientHelper ("ns3::TcpSocketFactory", Address ());
-	MonclientHelper.SetAttribute
-	("OnTime",  StringValue (on_time));//RandomVariableValue (ConstantVariable (1)));//on_time
-	MonclientHelper.SetAttribute
-	("OffTime", StringValue (off_time));
-	MonclientHelper.SetAttribute("FlowId", UintegerValue (fid));
-	MonclientHelper.SetConstantRate (DataRate (data_rate));
-	MonclientHelper.SetAttribute ("PacketSize", UintegerValue (pktSize));
-
-	Address sinkLocalAddress (InetSocketAddress (Ipv4Address::GetAny (), port));
-	PacketSinkHelper sinkHelper ("ns3::TcpSocketFactory", sinkLocalAddress);
-	ApplicationContainer sinkApp = sinkHelper.Install (bsNodes);
-	sinkApp.Start (Seconds (1.0));
-	sinkApp.Stop (Seconds (duration));
-
 	PointToPointHelper p2p;
 	std::vector<NetDeviceContainer> MondeviceAdjacencyList (numUsers);
+
 	for(uint32_t i=0; i<MondeviceAdjacencyList.size (); ++i)
 	{
-	MondeviceAdjacencyList[i] = p2p.Install (MonnodeAdjacencyList[i]);
+		NS_LOG_UNCOND("Ba#"<<i);
+		MondeviceAdjacencyList[i].Add(bsDevs);
+		NetDeviceContainer dev = wimax.Install (ssNodes.Get(i),WimaxHelper::DEVICE_TYPE_SUBSCRIBER_STATION,WimaxHelper::SIMPLE_PHY_TYPE_OFDM,scheduler);
+//		if (dev==NULL)
+//			NS_LOG_UNCOND("dev is null");
+	   // Ptr<SubscriberStationNetDevice>* ss = new Ptr<SubscriberStationNetDevice>[numUsers];
+		MondeviceAdjacencyList[i].Add(dev);
+		NS_LOG_UNCOND("Bb#"<<i);
+		MondeviceAdjacencyList[i] = p2p.Install (MonnodeAdjacencyList[i]);
+		NS_LOG_UNCOND("Baa#"<<i);
+		ss[i] =dev.Get(0)->GetObject<SubscriberStationNetDevice> ();
+		if (ss[i] == NULL)
+			NS_LOG_UNCOND("ss[i] is null");
+		NS_LOG_UNCOND("Baaaa#"<<i);
+		ss[i]->SetModulationType (WimaxPhy::MODULATION_TYPE_QAM16_12);
+		NS_LOG_UNCOND("Baaaaaaaa#"<<i);
 	}
 	// Later, we add IP addresses.
-	NS_LOG_INFO ("Assign IP Addresses.");
+	NS_LOG_UNCOND ("Assign IP Addresses.");
 	Ipv4AddressHelper ipv4;
-
-	std::vector<Ipv4InterfaceContainer> MoninterfaceAdjacencyList (numUsers);
 
 	for( uint32_t i=0; i<MoninterfaceAdjacencyList.size (); ++i)
 	{
+		NS_LOG_UNCOND("C#"<<i);
 		std::ostringstream subnet;
 		int cc,dd;
 		dd = ((i+1+created_nodes)%62) +1;  //first 6 digit of dd
@@ -154,18 +156,53 @@ int Uplink_TCP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration, I
 		ipv4.SetBase (subnet.str ().c_str (), "255.255.255.252");
 		MoninterfaceAdjacencyList[i] = ipv4.Assign (MondeviceAdjacencyList[i]);
 	}
+	created_nodes = created_nodes + numUsers;
+	NS_LOG_UNCOND("D");
+}
+
+
+//TCP Traffic
+int Uplink_TCP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration, Ipv4InterfaceContainer BSinterface, std::vector<Ipv4InterfaceContainer> MoninterfaceAdjacencyList,
+		NodeContainer bsNodes, NodeContainer ssNodes , Ptr<SubscriberStationNetDevice> ss[], std::string on_time, std::string off_time,
+		int fid, ServiceFlow::SchedulingType  schedulinType,std::string data_rate, uint32_t pktSize)
+{
+	port+=10;
+	//Collect an adjacency list of nodes for the p2p topology
+//	std::vector<NodeContainer> MonnodeAdjacencyList (numUsers);
+//	for(uint32_t i=0; i<MonnodeAdjacencyList.size (); ++i)
+//	{
+//		MonnodeAdjacencyList[i] = NodeContainer (bsNodes, ssNodes.Get (i));
+//	}
+	NS_LOG_UNCOND("2a port:"<<port);
+	OnOffHelper MonclientHelper ("ns3::TcpSocketFactory", Address ());
+	MonclientHelper.SetAttribute
+	("OnTime",  StringValue (on_time));//RandomVariableValue (ConstantVariable (1)));//on_time
+	MonclientHelper.SetAttribute
+	("OffTime", StringValue (off_time));
+	MonclientHelper.SetAttribute("FlowId", UintegerValue (fid));
+	MonclientHelper.SetConstantRate (DataRate (data_rate));
+	MonclientHelper.SetAttribute ("PacketSize", UintegerValue (pktSize));
+
+	NS_LOG_UNCOND("2b");
+	Address sinkLocalAddress (InetSocketAddress (Ipv4Address::GetAny (), port));
+	PacketSinkHelper sinkHelper ("ns3::TcpSocketFactory", sinkLocalAddress);
+	ApplicationContainer sinkApp = sinkHelper.Install (bsNodes);
+	sinkApp.Start (Seconds (1.0));
+	sinkApp.Stop (Seconds (duration));
+
 
 	//normally wouldn't need a loop here but the server IP address is different
 	//on each p2p subnet
 	// ApplicationContainer MonclientApps;
-	ApplicationContainer* MonclientApps = new ApplicationContainer[numUsers];
+	ApplicationContainer MonclientApps; // = new ApplicationContainer[numUsers];
 	for(uint32_t i=0; i< ssNodes.GetN (); ++i)
 	{
-		AddressValue remoteAddress
-		(InetSocketAddress (MoninterfaceAdjacencyList[i].GetAddress (0), port));
+		NS_LOG_UNCOND("2c#" << i << "size " << MoninterfaceAdjacencyList.size() << ssNodes.GetN ());
+		AddressValue remoteAddress (InetSocketAddress (MoninterfaceAdjacencyList[i].GetAddress (0), port));
 		MonclientHelper.SetAttribute ("Remote", remoteAddress);
 		// clientHelper.SetAttribute ("FlowId", UintegerValue (i));
-		MonclientApps[i] = MonclientHelper.Install (ssNodes.Get (i));//      MonclientApps.Add
+		MonclientApps.Add(MonclientHelper.Install (ssNodes.Get (i)));//      MonclientApps.Add
+		NS_LOG_UNCOND("2cc1");
 		IpcsClassifierRecord UlClassifier  = IpcsClassifierRecord(MoninterfaceAdjacencyList[i].GetAddress (1),//
 													Ipv4Mask ("255.255.255.252"),
 													Ipv4Address ("0.0.0.0"), //BSinterface.GetAddress (0),
@@ -176,97 +213,128 @@ int Uplink_TCP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration, I
 													port,
 													17,
 													1);
+		NS_LOG_UNCOND("2cc2");
 		ServiceFlow UlServiceFlowUgs = wimax.CreateServiceFlow (ServiceFlow::SF_DIRECTION_UP, schedulinType,UlClassifier);
+		NS_LOG_UNCOND("2cc3");
 		ss[i]->AddServiceFlow (UlServiceFlowUgs);
+		NS_LOG_UNCOND("2cc4");
 		//UniformVariable t;
-		MonclientApps[i].Start (Seconds (1.0));  //t.GetValue()));
-		MonclientApps[i].Stop (Seconds (duration));
 	}
-
-
-	created_nodes+= numUsers;
+	NS_LOG_UNCOND("2d");
+	MonclientApps.Start (Seconds (1.0));  //t.GetValue()));
+	MonclientApps.Stop (Seconds (duration));
 	return port;
 }
 
-//int Downlink_TCP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration, Ipv4InterfaceContainer BSinterface, Ipv4InterfaceContainer SSinterfaces, int &created_nodes,
-//		NodeContainer bsNodes, NodeContainer ssNodes , Ptr<SubscriberStationNetDevice> ss[], std::string on_time, std::string off_time, int fid, ServiceFlow::SchedulingType  schedulinType,
-//		std::string data_rate, uint32_t pktSize)
-//{
-//		port+=10;
-//    	//Collect an adjacency list of nodes for the p2p topology
-//    	std::vector<NodeContainer> MonnodeAdjacencyList (numUsers);
-//    	for(uint32_t i=0; i<MonnodeAdjacencyList.size (); ++i)
-//    	{
-//    		MonnodeAdjacencyList[i] = NodeContainer (bsNodes, ssNodes.Get (i));
-//    	}
+int Downlink_TCP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration, Ipv4InterfaceContainer BSinterface, std::vector<Ipv4InterfaceContainer> MoninterfaceAdjacencyList,
+		NodeContainer bsNodes, NodeContainer ssNodes , Ptr<SubscriberStationNetDevice> ss[], std::string on_time, std::string off_time,
+		int fid, ServiceFlow::SchedulingType  schedulinType,std::string data_rate, uint32_t pktSize)
+{
+	port+=10;
+	//Collect an adjacency list of nodes for the p2p topology
+//	std::vector<NodeContainer> MonnodeAdjacencyList (numUsers);
+//	for(uint32_t i=0; i<MonnodeAdjacencyList.size (); ++i)
+//	{
+//		MonnodeAdjacencyList[i] = NodeContainer (bsNodes, ssNodes.Get (i));
+//	}
+
+
+	OnOffHelper MonclientHelper ("ns3::TcpSocketFactory", Address ());
+	MonclientHelper.SetAttribute
+	("OnTime",  StringValue (on_time));//RandomVariableValue (ConstantVariable (1)));//on_time
+	MonclientHelper.SetAttribute
+	("OffTime", StringValue (off_time));
+	MonclientHelper.SetAttribute("FlowId", UintegerValue (fid));
+	MonclientHelper.SetConstantRate (DataRate (data_rate));
+	MonclientHelper.SetAttribute ("PacketSize", UintegerValue (pktSize));
+
 //
-//	  	  OnOffHelper MonclientHelper ("ns3::TcpSocketFactory", Address ());
-//		  MonclientHelper.SetAttribute
-//		    ("OnTime",  StringValue (on_time));//RandomVariableValue (ConstantVariable (1)));//on_time
-//		  MonclientHelper.SetAttribute
-//		    ("OffTime", StringValue (off_time));
-//		  //MonclientHelper.SetAttribute("FlowId", UintegerValue (fid));
-//		  MonclientHelper.SetConstantRate (DataRate (data_rate));
-//		  MonclientHelper.SetAttribute ("PacketSize", UintegerValue (pktSize));
+//	  Address d_sinkLocalAddress (InetSocketAddress (Ipv4Address::GetAny (), port));
+//	  PacketSinkHelper d_sinkHelper ("ns3::TcpSocketFactory", d_sinkLocalAddress);
+//	  ApplicationContainer d_sinkApp = d_sinkHelper.Install (MonNodes);
+//	  d_sinkApp.Start (Seconds (1.0)); //y.GetValue()));
+//	  d_sinkApp.Stop (Seconds (duration));
 //
-//		  PointToPointHelper p2p;
-//		  std::vector<NetDeviceContainer> MondeviceAdjacencyList (numUsers);
-//		  for(uint32_t i=0; i<MondeviceAdjacencyList.size (); ++i)
-//		      {
-//		        MondeviceAdjacencyList[i] = p2p.Install (MonnodeAdjacencyList[i]);
-//		      }
-//		   // Later, we add IP addresses.
-//		 NS_LOG_INFO ("Assign IP Addresses.");
-//		 Ipv4AddressHelper ipv4;
-//
-//		 std::vector<Ipv4InterfaceContainer> MoninterfaceAdjacencyList (numUsers);
-//
-//		 for( uint32_t i=0; i<MoninterfaceAdjacencyList.size (); ++i)
-//		   {
-//			 std::ostringstream subnet;
-//			 int cc,dd;
-//			 dd = ((i+1+created_nodes)%62) +1;  //first 6 digit of dd
-//			 cc = (i+1+created_nodes-dd+1)/62 +  1; // created_nodes
-//			 dd *= 4;
-//			 subnet << "10.1."<<  cc << "." << dd ;
-//			 NS_LOG_UNCOND("cn: " << created_nodes << ", i: " << i << ", cc: " << cc << ", dd:" << dd);
-//			 ipv4.SetBase (subnet.str ().c_str (), "255.255.255.252");
-//			 MoninterfaceAdjacencyList[i] = ipv4.Assign (MondeviceAdjacencyList[i]);
-//		   }
-//
-//		  //normally wouldn't need a loop here but the server IP address is different
-//		  //on each p2p subnet
-//		 // ApplicationContainer MonclientApps;
-//		  ApplicationContainer* MonclientApps = new ApplicationContainer[numUsers];
-//		  for(uint32_t i=0; i< ssNodes.GetN (); ++i)
-//		    {
-//		      AddressValue remoteAddress
-//		        (InetSocketAddress (MoninterfaceAdjacencyList[i].GetAddress (0), port));
-//		      MonclientHelper.SetAttribute ("Remote", remoteAddress);
-//		     // clientHelper.SetAttribute ("FlowId", UintegerValue (i));
-//		      MonclientApps[i] = MonclientHelper.Install (ssNodes.Get (i));//      MonclientApps.Add
-//		      IpcsClassifierRecord UlClassifier  = IpcsClassifierRecord(MoninterfaceAdjacencyList[i].GetAddress (1),//
-//		       												Ipv4Mask ("255.255.255.252"),
-//		       												Ipv4Address ("0.0.0.0"), //BSinterface.GetAddress (0),
-//		       												Ipv4Mask ("0.0.0.0"),
-//		       												0,
-//		       												65000,
-//		       												port,
-//		       												port,
-//		       												17,
-//		       												1);
-//			  ServiceFlow UlServiceFlowUgs = wimax.CreateServiceFlow (ServiceFlow::SF_DIRECTION_UP, schedulinType,UlClassifier);
-//			  ss[i]->AddServiceFlow (UlServiceFlowUgs);
-//			  //UniformVariable t;
-//			  MonclientApps[i].Start (Seconds (1.0));  //t.GetValue()));
-//			  MonclientApps[i].Stop (Seconds (duration));
-//		    }
+
+
+	Address sinkLocalAddress (InetSocketAddress (Ipv4Address::GetAny (), port));
+	PacketSinkHelper sinkHelper ("ns3::TcpSocketFactory", sinkLocalAddress);
+	ApplicationContainer sinkApp = sinkHelper.Install (ssNodes);
+	sinkApp.Start (Seconds (1.0));
+	sinkApp.Stop (Seconds (duration));
+
+
+
+
 //
 //
-//		  created_nodes+= numUsers;
 //
-//		  return port;
-//}
+//
+//
+//	  ApplicationContainer d_MonclientApps;
+//	  for(uint32_t i=0; i< MonNodes.GetN (); ++i)
+//	    {
+//	      AddressValue remoteAddress
+//	        (InetSocketAddress (MoninterfaceAdjacencyList[i].GetAddress (1), port));
+//	      d_MonclientHelper.SetAttribute ("Remote", remoteAddress);
+//	      // clientHelper.SetAttribute ("FlowId", UintegerValue (i));
+//	      d_MonclientApps.Add (d_MonclientHelper.Install (bsNode.Get (0)));
+//	      IpcsClassifierRecord DlClassifier (Ipv4Address ("0.0.0.0"), // MoninterfaceAdjacencyList[i].GetAddress(0)
+//	                                               Ipv4Mask ("0.0.0.0"), // "255.255.255.252"
+//	                                               MoninterfaceAdjacencyList[i].GetAddress (1),
+//	                                               Ipv4Mask ("255.255.255.252"),
+//	                                               0,
+//	                                               65000,
+//	                                               port,
+//	                                               port,
+//	                                               17,
+//	                                               1);
+//	      ServiceFlow DlServiceFlow = wimax.CreateServiceFlow (d_direction,
+//							  	  	  	  	  	  	  	  	  	  	  	  d_schedulinType,
+//							  	  	  	  	  	  	  	  	  	  	  	  DlClassifier);
+//	      Mon[i]->AddServiceFlow (DlServiceFlow);
+//
+//	    }
+////	  	  UniformVariable u;
+//	  d_MonclientApps.Start (Seconds (1.0)); //u.GetValue()));
+//	  d_MonclientApps.Stop (Seconds (duration));
+//
+//
+//
+//
+
+
+	//normally wouldn't need a loop here but the server IP address is different
+	//on each p2p subnet
+	// ApplicationContainer MonclientApps;
+	ApplicationContainer MonclientApps; // = new ApplicationContainer[numUsers];
+	for(uint32_t i=0; i< ssNodes.GetN (); ++i)
+	{
+		AddressValue remoteAddress
+		(InetSocketAddress (MoninterfaceAdjacencyList[i].GetAddress (1), port));
+		MonclientHelper.SetAttribute ("Remote", remoteAddress);
+		// clientHelper.SetAttribute ("FlowId", UintegerValue (i));
+		MonclientApps.Add(MonclientHelper.Install (bsNodes.Get (0)));//      MonclientApps.Add
+		IpcsClassifierRecord DlClassifier  = IpcsClassifierRecord(MoninterfaceAdjacencyList[i].GetAddress (1),//
+													Ipv4Mask ("255.255.255.252"),
+													Ipv4Address ("0.0.0.0"), //BSinterface.GetAddress (0),
+													Ipv4Mask ("0.0.0.0"),
+													0,
+													65000,
+													port,
+													port,
+													17,
+													1);
+		ServiceFlow DlServiceFlow = wimax.CreateServiceFlow (ServiceFlow::SF_DIRECTION_DOWN, schedulinType,DlClassifier);
+		ss[i]->AddServiceFlow (DlServiceFlow);
+		//UniformVariable t;
+	}
+	MonclientApps.Start (Seconds (1.0));  //t.GetValue()));
+	MonclientApps.Stop (Seconds (duration));
+	return port;
+
+
+}
 
 int Uplink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration, Ipv4InterfaceContainer BSinterface, Ipv4InterfaceContainer SSinterfaces,
 		NodeContainer bsNodes, NodeContainer ssNodes , Ptr<SubscriberStationNetDevice> ss[])
@@ -282,6 +350,7 @@ int Uplink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration, I
 		  udpClientUL[i] = UdpClientHelper (BSinterface.GetAddress (0), port);
 		  udpClientUL[i].SetAttribute ("MaxPackets", UintegerValue (1200));
 		  udpClientUL[i].SetAttribute ("Interval", TimeValue (Seconds (1)));
+		  udpClientUL[i].SetAttribute("FlowId", UintegerValue(2));
 		  udpClientUL[i].SetAttribute ("PacketSize", UintegerValue (128));
 		  clientAppsUL[i] = udpClientUL[i].Install (ssNodes.Get(i));
 		  clientAppsUL[i].Start (Seconds (1.5));
@@ -316,6 +385,7 @@ int Downlink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration,
 	int port1 = port;
 	for (int i = 0; i < numUsers; i++)
 	{
+		NS_LOG_UNCOND("3a"<<i);
 		port=port+10;
 		//create applications whose servers are on ssNodes
 		udpServerDL[i] = UdpServerHelper (port);
@@ -324,10 +394,15 @@ int Downlink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration,
 		serverAppsDL[i].Stop (Seconds (duration));
 		//create clients on BS for each application
 		udpClientDL[i] = UdpClientHelper (SSinterfaces.GetAddress (i), port);
+		NS_LOG_UNCOND("3aa"<<i);
 		udpClientDL[i].SetAttribute ("MaxPackets", UintegerValue (1200));
 		udpClientDL[i].SetAttribute ("Interval", TimeValue (Seconds (1)));
+		NS_LOG_UNCOND("3aaaa"<<i);
+		udpClientDL[i].SetAttribute("FlowId", UintegerValue(6));
+		NS_LOG_UNCOND("3aaaaa"<<i);
 		udpClientDL[i].SetAttribute ("PacketSize", UintegerValue (128));
 		clientAppsDL[i] = udpClientDL[i].Install (bsNodes.Get(0));
+		NS_LOG_UNCOND("3aaaaaa"<<i);
 		clientAppsDL[i].Start (Seconds (1.5));
 		clientAppsDL[i].Stop (Seconds (duration));
 	}
@@ -335,6 +410,7 @@ int Downlink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration,
 	//classifier
 	for (int i = 0; i < numUsers; i++)
 	{
+		NS_LOG_UNCOND("3b"<<i);
 		DlClassifierUgs[i] = IpcsClassifierRecord  (Ipv4Address ("0.0.0.0"),
 										  Ipv4Mask ("0.0.0.0"),
 										  SSinterfaces.GetAddress (i),
@@ -348,9 +424,10 @@ int Downlink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration,
 		DlServiceFlowUgs[i] = wimax.CreateServiceFlow (ServiceFlow::SF_DIRECTION_DOWN,
 															ServiceFlow::SF_TYPE_RTPS,
 															DlClassifierUgs[i]);
+		NS_LOG_UNCOND("3c"<<i);
 		ss[i]->AddServiceFlow (DlServiceFlowUgs[i]);
 	}
-
+	NS_LOG_UNCOND("3d");
 	return port;
 }
 int main (int argc, char *argv[])
@@ -424,16 +501,17 @@ int main (int argc, char *argv[])
 	Ipv4InterfaceContainer SSinterfacesPtct;
 	if (numPtctUsers > 0)
 	{
-		NodeConfigurationCommonSetup(wimax,numPtctUsers,stack,address,scheduler,ssNodesPtct,ssPtct,SSinterfacesPtct);
+		NodeConfigurationCommonSetupUDP(wimax,numPtctUsers,stack,address,scheduler,ssNodesPtct,ssPtct,SSinterfacesPtct);
 	}
 
 	NodeContainer ssNodesMon;
 	Ptr<SubscriberStationNetDevice> ssMon[numMonUsers];
-	Ipv4InterfaceContainer SSinterfacesMon;
+	std::vector<Ipv4InterfaceContainer> MoninterfaceAdjacencyList (numMonUsers);
 	if (numMonUsers > 0)
 	{
-
-		NodeConfigurationCommonSetup(wimax,numMonUsers,stack,address,scheduler,ssNodesMon,ssMon,SSinterfacesMon);
+		created_nodes = numPtctUsers;
+		NS_LOG_UNCOND("0");
+		NodeConfigurationCommonSetupTCP(wimax,numMonUsers,created_nodes,stack,address,scheduler,bsDevs,bsNodes,ssNodesMon,ssMon,MoninterfaceAdjacencyList);
 	}
 	/* END COMMON*/
 
@@ -445,34 +523,36 @@ int main (int argc, char *argv[])
 		//Protection is UDP:
 		if (numPtctUsers > 0)
 		{
+			NS_LOG_UNCOND("1");
 			port = Uplink_UDP_Traffic(wimax, port, numPtctUsers, duration, BSinterface, SSinterfacesPtct, bsNodes, ssNodesPtct, ssPtct);
 		}
 
 		//Monitoring is TCP:
 		if (numMonUsers > 0)
 		{
-			created_nodes = numPtctUsers+numMonUsers; //we add because some addresses are allocated but not used in TCP @ common (i.e. SSinterfacesMon is not used in function below).
-			port = Uplink_TCP_Traffic(wimax, port, numMonUsers, duration, BSinterface, SSinterfacesMon, created_nodes, bsNodes, ssNodesMon, ssMon,
-					"ns3::ConstantRandomVariable[Constant=1.0]", "ns3::ConstantRandomVariable[Constant=0.01]", 1, ServiceFlow::SF_TYPE_NRTPS, "200kb/s", 256);
+			NS_LOG_UNCOND("2");
+			port = Uplink_TCP_Traffic(wimax, port, numMonUsers, duration, BSinterface, MoninterfaceAdjacencyList,  bsNodes, ssNodesMon, ssMon,
+					"ns3::ConstantRandomVariable[Constant=1.0]", "ns3::ConstantRandomVariable[Constant=5]", 0, ServiceFlow::SF_TYPE_NRTPS, "100kb/s", 128);
 		}
 
 	}
 	//NS_LOG_UNCOND("after UL");
-//	if (enableDownlink)
-//	{
-//		if (numPtctUsers > 0)
-//		{
-//			port = Downlink_UDP_Traffic(wimax, port, numPtctUsers, duration, SSinterfacesPtct, bsNodes, ssNodesPtct, ssPtct);
-//		}
-//
-//		//Monitoring is TCP:
-//		if (numMonUsers > 0)
-//		{
-//			created_nodes = numPtctUsers;
-//			port = Downlink_TCP_Traffic(wimax, port, numMonUsers, duration, BSinterface, SSinterfacesMon, created_nodes, bsNodes, ssNodesMon, ssMon,
-//					"ns3::ConstantRandomVariable[Constant=1.0]", "ns3::ConstantRandomVariable[Constant=0.01]",  ServiceFlow::SF_TYPE_NRTPS, "200kb/s", 256);
-//		}
-//	}
+	if (enableDownlink)
+	{
+		if (numPtctUsers > 0)
+		{
+			NS_LOG_UNCOND("3");
+			port = Downlink_UDP_Traffic(wimax, port, numPtctUsers, duration, SSinterfacesPtct, bsNodes, ssNodesPtct, ssPtct);
+		}
+
+		//Monitoring is TCP:
+		if (numMonUsers > 0)
+		{
+			NS_LOG_UNCOND("4");
+			port = Downlink_TCP_Traffic(wimax, port, numMonUsers, duration, BSinterface, MoninterfaceAdjacencyList, bsNodes, ssNodesMon, ssMon,
+					"ns3::ConstantRandomVariable[Constant=1.0]", "ns3::ConstantRandomVariable[Constant=5]", 4, ServiceFlow::SF_TYPE_NRTPS, "100kb/s", 128);
+		}
+	}
 //  if (enableUplink)
 //  {
 //	  //uplink
