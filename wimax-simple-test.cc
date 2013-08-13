@@ -632,6 +632,16 @@ int main (int argc, char *argv[])
 //  }
 
   //first get the number of sent packets:
+  //udp for Protection DL:
+  int totalSentPtctDL[MAX_USERS];
+  for (int appnum=appnumBeforePtctDL; appnum<appnumAfterPtctDL; appnum++)
+  {
+	  Ptr<UdpClient> bsAppPtctDL = Ptr<UdpClient> (dynamic_cast<UdpClient *> (PeekPointer(bsNodes.Get(0)->GetApplication(appnum))));
+	  //NS_LOG_UNCOND(";;;;;;;;;;;;;;;;"<<bsAppPtctDL->m_Sent[6]<<";;;;;;;;;;;;;;;;");
+	  totalSentPtctDL[appnum-appnumBeforePtctDL] = bsAppPtctDL->m_Sent[6];
+	  NS_LOG_UNCOND("totalSentPtctDL[" << appnum-appnumBeforePtctDL << "," << appnum << "]=" <<  bsAppPtctDL->m_Sent[6] );
+  }
+
   //on-off for Control DL
   int totalSentCtrlDL[MAX_USERS];
   for (int appnum=appnumBeforeCtrlDL; appnum<appnumAfterCtrlDL; appnum++)
@@ -664,7 +674,7 @@ int main (int argc, char *argv[])
   for (int j=0; j < numPtctUsers; j++)
   {
 	  Ptr<UdpClient> myApp = Ptr<UdpClient> (dynamic_cast<UdpClient *> (PeekPointer(ssNodesPtct.Get(j)->GetApplication(0))));
-	  totalSentPtctUL +=  myApp->Sent[2];
+	  totalSentPtctUL +=  myApp->m_Sent[2];
   }
   NS_LOG_UNCOND("totalSentPtctUL (fid=2)=" << totalSentPtctUL);
   //UDP for Monitoring UL (sum)
@@ -672,7 +682,7 @@ int main (int argc, char *argv[])
   for (int j=0; j < numMonUsers; j++)
   {
 	  Ptr<UdpClient> myApp = Ptr<UdpClient> (dynamic_cast<UdpClient *> (PeekPointer(ssNodesMonUL.Get(j)->GetApplication(0))));
-	  totalSentMonUL +=  myApp->Sent[0];
+	  totalSentMonUL +=  myApp->m_Sent[0];
   }
   NS_LOG_UNCOND("totalSentMonUL (fid=0)=" << totalSentMonUL);
   //on-off for Control UL (sum)
@@ -710,13 +720,27 @@ int main (int argc, char *argv[])
 			  << myNode->Delays[i].ToDouble(Time::MS)/float(myNode->Recv[i]) << std::endl );
   }
 
+  NS_LOG_UNCOND("UDP DL Ptct:\nFlow Id\tSent\tRecv\tReliable Received\tAvg. Delay\n");
+  for (int j=0; j<numPtctUsers; j++)
+  {
+	  NS_LOG_UNCOND("Protection Node#" << j << "--");
+	  Ptr<Node> myNode = ssNodesPtct.Get(j);
+	  //Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
+	  for (int i=0; i< FLOW_NUM; i++)
+	  {
+		  if (i==6)
+		  NS_LOG_UNCOND(i << "\t" << totalSentPtctDL[j] << "\t" << myNode->Recv[i] << "\t" <<  myNode->reliable_received[i] << "\t\t"
+				  << myNode->Delays[i].ToDouble(Time::MS)/float(myNode->Recv[i]) << std::endl );
+
+	  }
+  }
 
   NS_LOG_UNCOND("TCP DL Ctrl:\nFlow Id\tSent\tRecv\tReliable Received\tAvg. Delay\n");
   for (int j=0; j<numCtrlUsers; j++)
   {
 	  NS_LOG_UNCOND("Control Node#" << j << "--");
 	  Ptr<Node> myNode = ssNodesCtrl.Get(j);
-	  Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
+	  //Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
 	  for (int i=0; i< FLOW_NUM; i++)
 	  {
 		  if (i==5)
@@ -731,7 +755,7 @@ int main (int argc, char *argv[])
    {
  	  NS_LOG_UNCOND("Monitoring Node#" << j << "--");
  	  Ptr<Node> myNode = ssNodesMonDL.Get(j);
- 	  Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
+ 	  //Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
  	  for (int i=0; i< FLOW_NUM; i++)
  	  {
  		  if (i==4)

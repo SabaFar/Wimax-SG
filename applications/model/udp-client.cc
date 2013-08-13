@@ -85,16 +85,16 @@ UdpClient::UdpClient ()
   m_sent = 0;
   m_socket = 0;
 
-  	Sent[0]=0;
-	Sent[1]=0;
-	Sent[2]=0;
-	Sent[3]=0;
-	Sent[4]=0;
-	Sent[5]=0;
-	Sent[6]=0;
-	Sent[7]=0;
-	Sent[8]=0;
-	Sent[9]=0;
+  	m_Sent[0]=0;
+	m_Sent[1]=0;
+	m_Sent[2]=0;
+	m_Sent[3]=0;
+	m_Sent[4]=0;
+	m_Sent[5]=0;
+	m_Sent[6]=0;
+	m_Sent[7]=0;
+	m_Sent[8]=0;
+	m_Sent[9]=0;
 
   m_sendEvent = EventId ();
 }
@@ -193,13 +193,13 @@ UdpClient::Send (void)
   if ((m_socket->Send (p)) >= 0)
     {
       ++m_sent;
-      Sent[fid.Get()]++;
+      m_Sent[fid.Get()]++;
 
       NS_LOG_INFO ("TraceDelay TX " << m_size << " bytes to "
                                     << peerAddressStringStream.str () << " Uid: "
                                     << p->GetUid () << " Time: "
                                     << (Simulator::Now ()).GetSeconds () << " Flowid: "
-                                    << fid.Get() << " Total Sent:" << Sent[fid.Get()]);
+                                    << fid.Get() << " Total Sent:" << m_Sent[fid.Get()]);
 
 
 

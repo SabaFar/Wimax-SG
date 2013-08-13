@@ -43,7 +43,7 @@ class Packet;
 class UdpClient : public Application
 {
 public:
-	int Sent[FLOW_NUM];
+	int m_Sent[FLOW_NUM];
   static TypeId
   GetTypeId (void);
 
