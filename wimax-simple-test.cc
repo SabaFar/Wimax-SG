@@ -58,6 +58,7 @@
 #include "assert.h"
 #include "ns3/service-flow.h"
 #include <iostream>
+#include <sstream>
 
 #define MAX_USERS 1205
 NS_LOG_COMPONENT_DEFINE ("WimaxSimpleExample");
@@ -99,7 +100,7 @@ int appnumBeforePtctUL=-1;
 int appnumBeforeSMDL=-1;
 int appnumBeforeSMUL=-1;
 
-void NodeConfigurationCommonSetupUDP(WimaxHelper &wimax, int numUsers, int &created_nodes,InternetStackHelper &stack, Ipv4AddressHelper &address, WimaxHelper::SchedulerType scheduler, /*inputs*/
+void NodeConfigurationCommonSetupUDP(WimaxHelper &wimax, int numUsers, int &created_nodes, int areaRadius, InternetStackHelper &stack, Ipv4AddressHelper &address, WimaxHelper::SchedulerType scheduler, /*inputs*/
 		NodeContainer &ssNodes, Ptr<SubscriberStationNetDevice> *ss, Ipv4InterfaceContainer &SSinterfaces /*outputs*/)
 {
 	/*------------------------------*/
@@ -115,21 +116,46 @@ void NodeConfigurationCommonSetupUDP(WimaxHelper &wimax, int numUsers, int &crea
 						  scheduler);
 	stack.Install (ssNodes);
 	SSinterfaces = address.Assign (ssDevs);
+
+	//node positions
+	MobilityHelper mobility;
+	std::ostringstream convert;
+	convert << areaRadius;
+	mobility.SetPositionAllocator ("ns3::UniformDiscPositionAllocator",
+				 "X", StringValue ("0.0"),
+				 "Y", StringValue ("0.0"),
+				 "rho", StringValue (convert.str()));//rho = 5000, My_Ro
+	mobility.Install(ssNodes);
+
 	for (int i = 0; i < numUsers; i++)
 	{
-	  ss[i] = ssDevs.Get (i)->GetObject<SubscriberStationNetDevice> ();
-	  ss[i]->SetModulationType (WimaxPhy::MODULATION_TYPE_QAM16_12);
+		ss[i] = ssDevs.Get (i)->GetObject<SubscriberStationNetDevice> ();
+		ss[i]->SetModulationType (WimaxPhy::MODULATION_TYPE_QAM16_12);
 	}
 	created_nodes = created_nodes + numUsers;
 	//NS_LOG_UNCOND("SSinterfaces 0:" << SSinterfaces.GetAddress(0));
 }
 
-void NodeConfigurationCommonSetupTCP(WimaxHelper &wimax, int numUsers, int &created_nodes, InternetStackHelper &stack, Ipv4AddressHelper &address, WimaxHelper::SchedulerType scheduler,
+void NodeConfigurationCommonSetupTCP(WimaxHelper &wimax, int numUsers, int &created_nodes, int areaRadius,InternetStackHelper &stack, Ipv4AddressHelper &address, WimaxHelper::SchedulerType scheduler,
 		NetDeviceContainer bsDevs, NodeContainer bsNodes, /*inputs*/
 		NodeContainer &ssNodes, Ptr<SubscriberStationNetDevice> ss[], std::vector<Ipv4InterfaceContainer> &interfaceAdjacencyList) //Ipv4InterfaceContainer &SSinterfaces /*outputs*/)
 {
 	ssNodes.Create (numUsers);
 	NetDeviceContainer ssDevs = wimax.Install (ssNodes,WimaxHelper::DEVICE_TYPE_SUBSCRIBER_STATION,WimaxHelper::SIMPLE_PHY_TYPE_OFDM,scheduler);
+
+	//node positions
+	MobilityHelper mobility;
+	std::ostringstream convert;
+	convert << areaRadius;
+	mobility.SetPositionAllocator ("ns3::UniformDiscPositionAllocator",
+				 "X", StringValue ("0.0"),
+				 "Y", StringValue ("0.0"),
+				 "rho", StringValue (convert.str()));//rho = 5000, My_Ro
+
+	mobility.Install(ssNodes);
+
+
+
 	stack.Install (ssNodes);
 	std::vector<NodeContainer> MonnodeAdjacencyList (numUsers);
 	for(uint32_t i=0; i<MonnodeAdjacencyList.size (); ++i)
@@ -409,6 +435,7 @@ int main (int argc, char *argv[])
 	LogComponentEnable ("UdpServer", LOG_LEVEL_INFO);
 	LogComponentEnable ("OnOffApplication", LOG_LEVEL_ALL); //TCP
 	LogComponentEnable ("PacketSink", LOG_LEVEL_ALL); //TCP Sink
+	LogComponentEnable ("MobilityHelper",LOG_LEVEL_ALL); //Mobility Model
 	//LogComponentEnable ("WimaxMacQueue", LOG_LEVEL_ALL);
 
 	switch (schedType)
@@ -438,6 +465,14 @@ int main (int argc, char *argv[])
 	bsDevs = wimax.Install (bsNodes, WimaxHelper::DEVICE_TYPE_BASE_STATION, WimaxHelper::SIMPLE_PHY_TYPE_OFDM, scheduler);
 	Ptr<BaseStationNetDevice> bs;
 	bs = bsDevs.Get (0)->GetObject<BaseStationNetDevice> ();
+
+	//BS Position
+	Ptr<ConstantPositionMobilityModel> BSPosition;
+	BSPosition = CreateObject<ConstantPositionMobilityModel> ();
+
+	BSPosition->SetPosition (Vector (0, 0, 0));
+	bsNodes.Get (0)->AggregateObject (BSPosition);
+
 
 	InternetStackHelper stack;
 	stack.Install (bsNodes);
@@ -486,7 +521,7 @@ int main (int argc, char *argv[])
 	Ipv4InterfaceContainer SSinterfacesPtct;
 	if (numPtctUsers > 0)
 	{
-		NodeConfigurationCommonSetupUDP(wimax,numPtctUsers,created_nodes,stack,address,scheduler,ssNodesPtct,ssPtct,SSinterfacesPtct);
+		NodeConfigurationCommonSetupUDP(wimax,numPtctUsers,created_nodes,areaRadius,stack,address,scheduler,ssNodesPtct,ssPtct,SSinterfacesPtct);
 	}
 
 	NS_LOG_UNCOND("Common UDP Monitoring (UL) Setup.");
@@ -495,7 +530,7 @@ int main (int argc, char *argv[])
 	Ipv4InterfaceContainer SSinterfacesMonUL;
 	if (numMonUsers > 0)
 	{
-		NodeConfigurationCommonSetupUDP(wimax,numMonUsers,created_nodes,stack,address,scheduler,ssNodesMonUL,ssMonUL,SSinterfacesMonUL);
+		NodeConfigurationCommonSetupUDP(wimax,numMonUsers,created_nodes,areaRadius,stack,address,scheduler,ssNodesMonUL,ssMonUL,SSinterfacesMonUL);
 	}
 
 	NS_LOG_UNCOND("Common TCP Monitoring (DL) Setup.");
@@ -504,7 +539,7 @@ int main (int argc, char *argv[])
 	std::vector<Ipv4InterfaceContainer> MonDLinterfaceAdjacencyList (numMonUsers);
 	if (numMonUsers > 0)
 	{
-		NodeConfigurationCommonSetupTCP(wimax,numMonUsers,created_nodes,stack,address,scheduler,bsDevs,bsNodes,ssNodesMonDL,ssMonDL,MonDLinterfaceAdjacencyList);
+		NodeConfigurationCommonSetupTCP(wimax,numMonUsers,created_nodes,areaRadius,stack,address,scheduler,bsDevs,bsNodes,ssNodesMonDL,ssMonDL,MonDLinterfaceAdjacencyList);
 	}
 
 	NS_LOG_UNCOND("Common TCP Control Setup.");
@@ -513,7 +548,7 @@ int main (int argc, char *argv[])
 	std::vector<Ipv4InterfaceContainer> CtrlinterfaceAdjacencyList (numCtrlUsers);
 	if (numCtrlUsers > 0)
 	{
-		NodeConfigurationCommonSetupTCP(wimax,numCtrlUsers,created_nodes,stack,address,scheduler,bsDevs,bsNodes,ssNodesCtrl,ssCtrl,CtrlinterfaceAdjacencyList);
+		NodeConfigurationCommonSetupTCP(wimax,numCtrlUsers,created_nodes,areaRadius,stack,address,scheduler,bsDevs,bsNodes,ssNodesCtrl,ssCtrl,CtrlinterfaceAdjacencyList);
 	}
 
 	NS_LOG_UNCOND("Common TCP Smart Meters Setup.");
@@ -522,7 +557,7 @@ int main (int argc, char *argv[])
 	std::vector<Ipv4InterfaceContainer> SMinterfaceAdjacencyList (numSMUsers);
 	if (numSMUsers > 0)
 	{
-		NodeConfigurationCommonSetupTCP(wimax,numSMUsers,created_nodes,stack,address,scheduler,bsDevs,bsNodes,ssNodesSM,ssSM,SMinterfaceAdjacencyList);
+		NodeConfigurationCommonSetupTCP(wimax,numSMUsers,created_nodes,areaRadius,stack,address,scheduler,bsDevs,bsNodes,ssNodesSM,ssSM,SMinterfaceAdjacencyList);
 	}
 	/* END COMMON*/
 
@@ -700,7 +735,7 @@ int main (int argc, char *argv[])
 	  totalSentSMUL += myApp->m_Sent[3];
   }
 
-  NS_LOG_UNCOND("All UL flows:\nFlow Id\tSent\tRecv\tReliable Received\tAvg. Delay\n");
+  NS_LOG_UNCOND("All UL flows:\nFlow Id\tSent\tRecv\tReliable Recv\tAvg. Delay\n");
   myNode = bsNodes.Get(0);
   for (int i=0; i< FLOW_NUM; i++)
   {
@@ -720,7 +755,7 @@ int main (int argc, char *argv[])
 			  << myNode->Delays[i].ToDouble(Time::MS)/float(myNode->Recv[i]) << std::endl );
   }
 
-  NS_LOG_UNCOND("UDP DL Ptct:\nFlow Id\tSent\tRecv\tReliable Received\tAvg. Delay\n");
+  NS_LOG_UNCOND("UDP DL Ptct:\nFlow Id\tSent\tRecv\tReliable Recv\tAvg. Delay\n");
   for (int j=0; j<numPtctUsers; j++)
   {
 	  NS_LOG_UNCOND("Protection Node#" << j << "--");
@@ -735,7 +770,7 @@ int main (int argc, char *argv[])
 	  }
   }
 
-  NS_LOG_UNCOND("TCP DL Ctrl:\nFlow Id\tSent\tRecv\tReliable Received\tAvg. Delay\n");
+  NS_LOG_UNCOND("TCP DL Ctrl:\nFlow Id\tSent\tRecv\tReliable Recv\tAvg. Delay\n");
   for (int j=0; j<numCtrlUsers; j++)
   {
 	  NS_LOG_UNCOND("Control Node#" << j << "--");
@@ -750,7 +785,7 @@ int main (int argc, char *argv[])
 	  }
   }
 
-  NS_LOG_UNCOND("TCP DL Mon:\nFlow Id\tSent\tRecv\tReliable Received\tAvg. Delay\n");
+  NS_LOG_UNCOND("TCP DL Mon:\nFlow Id\tSent\tRecv\tReliable Recv\tAvg. Delay\n");
    for (int j=0; j<numMonUsers; j++)
    {
  	  NS_LOG_UNCOND("Monitoring Node#" << j << "--");
