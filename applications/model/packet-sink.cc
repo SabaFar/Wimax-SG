@@ -34,16 +34,6 @@
 #include "ns3/flow-id-tag.h"
 #include "ns3/delay-jitter-estimation.h"
 
-//#include "upd-server.h" //no need
-
-//#include "ns3/wimax-urban.h"
-//#include "../src/wimax/examples/wimax-urban.h"
-//#define FLOW_NUM 10
-//int reliable_received[FLOW_NUM];
-//ns3::Time latency[FLOW_NUM];
-//ns3::Time Delays[FLOW_NUM];
-//int Recv[FLOW_NUM];
-
 namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("PacketSink");
@@ -170,10 +160,6 @@ void PacketSink::HandleRead (Ptr<Socket> socket)
   Ptr<Packet> packet;
   Address from;
   FlowIdTag myflowid;
-   //SeqTsHeader seqTs;
- // DelayJitterEstimationTime myTimeTag;
-  //uint32_t currentSequenceNumber = seqTs.GetSeq ();
-  //int64_t current_Delay = 0;
   DelayJitterEstimation myrxtime;
 
 
@@ -186,9 +172,6 @@ void PacketSink::HandleRead (Ptr<Socket> socket)
         }
       myrxtime.RecordRx(packet);
       packet->FindFirstMatchingByteTag (myflowid);  //see http://www.nsnam.org/doxygen-release/wifi-phy-test_8cc_source.html
-      //packet->FindFirstMatchingByteTag(myTimeTag);
-      // uint32_t currentSequenceNumber = seqTs.GetSeq ();
-    //  current_Delay = Simulator::Now()  - myTimeTag.GetTxTime();
       current_Delay = myrxtime.GetLastDelay();
       this->GetNode()->Delays[myflowid.GetFlowId()] += current_Delay;
       //if (packet->GetUid() != this->m_prevUid)

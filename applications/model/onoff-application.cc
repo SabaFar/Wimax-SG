@@ -43,11 +43,6 @@
 #include "ns3/flow-id-tag.h"
 #include "ns3/delay-jitter-estimation.h"
 
-//#include "ns3/wimax-urban.h"
-//#include "../src/wimax/examples/wimax-urban.h"
-//#define FLOW_NUM 10
-//int Sent[FLOW_NUM];
-
 NS_LOG_COMPONENT_DEFINE ("OnOffApplication");
 
 namespace ns3 {

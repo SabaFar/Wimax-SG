@@ -75,50 +75,6 @@ UdpServer::UdpServer ()
   : m_lossCounter (0)
 
 {
-//  reliable_received[0]=0;
-//  reliable_received[1]=0;
-//  reliable_received[2]=0;
-//  reliable_received[3]=0;
-//  reliable_received[4]=0;
-//  reliable_received[5]=0;
-//  reliable_received[6]=0;
-//  reliable_received[7]=0;
-//  reliable_received[8]=0;
-//  reliable_received[9]=0;
-//
-//  latency[0]= ns3::Time(ns3::Seconds(0.1));
-//  latency[1]= ns3::Time(ns3::Seconds(0.1));
-//  latency[2]= ns3::Time(ns3::Seconds(0.02));
-//  latency[3]= ns3::Time(ns3::Seconds(5));
-//  latency[4]= ns3::Time(ns3::Seconds(0.1));
-//  latency[5]= ns3::Time(ns3::Seconds(0.1));
-//  latency[6]= ns3::Time(ns3::Seconds(0.02));
-//  latency[7]= ns3::Time(ns3::Seconds(5));
-//  latency[8]= ns3::Time(ns3::Seconds(0.0));
-//  latency[9]= ns3::Time(ns3::Seconds(0.0));
-//
-//  Delays[0]= ns3::Time(ns3::Seconds(0.0));
-//  Delays[1]= ns3::Time(ns3::Seconds(0.0));
-//  Delays[2]= ns3::Time(ns3::Seconds(0.0));
-//  Delays[3]= ns3::Time(ns3::Seconds(0.0));
-//  Delays[4]= ns3::Time(ns3::Seconds(0.0));
-//  Delays[5]= ns3::Time(ns3::Seconds(0.0));
-//  Delays[6]= ns3::Time(ns3::Seconds(0.0));
-//  Delays[7]= ns3::Time(ns3::Seconds(0.0));
-//  Delays[8]= ns3::Time(ns3::Seconds(0.0));
-//  Delays[9]= ns3::Time(ns3::Seconds(0.0));
-//
-//  Recv[0]=0;
-//  Recv[1]=0;
-//  Recv[2]=0;
-//  Recv[3]=0;
-//  Recv[4]=0;
-//  Recv[5]=0;
-//  Recv[6]=0;
-//  Recv[7]=0;
-//  Recv[8]=0;
-//  Recv[9]=0;
-
   NS_LOG_FUNCTION (this);
   m_received=0;
 }

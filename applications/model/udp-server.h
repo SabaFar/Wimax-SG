@@ -53,11 +53,6 @@ class UdpServer : public Application
 {
 public:
 
-//	int reliable_received[FLOW_NUM];
-//	ns3::Time latency[FLOW_NUM];
-//	ns3::Time Delays[FLOW_NUM];
-//	int Recv[FLOW_NUM];
-
   static TypeId GetTypeId (void);
   UdpServer ();
   virtual ~UdpServer ();

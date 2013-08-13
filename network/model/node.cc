@@ -88,16 +88,16 @@ Node::Construct (void)
   NS_LOG_FUNCTION (this);
   m_id = NodeList::Add (this);
 
-  reliable_received[0]= 0;
-  reliable_received[1]= 0;
-  reliable_received[2]= 0;
-  reliable_received[3]= 0;
-  reliable_received[4]= 0;
-  reliable_received[5]= 0;
-  reliable_received[6]= 0;
-  reliable_received[7]= 0;
-  reliable_received[8]= 0;
-  reliable_received[9]= 0;
+	reliable_received[0]= 0;
+	reliable_received[1]= 0;
+	reliable_received[2]= 0;
+	reliable_received[3]= 0;
+	reliable_received[4]= 0;
+	reliable_received[5]= 0;
+	reliable_received[6]= 0;
+	reliable_received[7]= 0;
+	reliable_received[8]= 0;
+	reliable_received[9]= 0;
 
 
 	latency[0]= ns3::Time(ns3::Seconds(0.1));
@@ -122,16 +122,16 @@ Node::Construct (void)
 	Delays[8]= ns3::Time(ns3::Seconds(0.0));
 	Delays[9]= ns3::Time(ns3::Seconds(0.0));
 
-  Recv[0] = 0;
-  Recv[1] = 0;
-  Recv[2] = 0;
-  Recv[3] = 0;
-  Recv[4] = 0;
-  Recv[5] = 0;
-  Recv[6] = 0;
-  Recv[7] = 0;
-  Recv[8] = 0;
-  Recv[9] = 0;
+	Recv[0] = 0;
+	Recv[1] = 0;
+	Recv[2] = 0;
+	Recv[3] = 0;
+	Recv[4] = 0;
+	Recv[5] = 0;
+	Recv[6] = 0;
+	Recv[7] = 0;
+	Recv[8] = 0;
+	Recv[9] = 0;
 
 }
 
