@@ -124,7 +124,7 @@ void NodeConfigurationCommonSetupUDP(WimaxHelper &wimax, int numUsers, int &crea
 	mobility.SetPositionAllocator ("ns3::UniformDiscPositionAllocator",
 				 "X", StringValue ("0.0"),
 				 "Y", StringValue ("0.0"),
-				 "rho", StringValue (convert.str()));//rho = 5000, My_Ro
+				 "rho", StringValue (convert.str())); //rho = 5000, My_Ro
 	mobility.Install(ssNodes);
 
 	for (int i = 0; i < numUsers; i++)
@@ -399,7 +399,7 @@ int Downlink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration,
 										  17,
 										  1);
 		DlServiceFlowUgs[i] = wimax.CreateServiceFlow (ServiceFlow::SF_DIRECTION_DOWN,
-															ServiceFlow::SF_TYPE_UGS,
+															ServiceFlow::SF_TYPE_RTPS,
 															DlClassifierUgs[i]);
 		ss[i]->AddServiceFlow (DlServiceFlowUgs[i]);
 	}
@@ -407,10 +407,10 @@ int Downlink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration,
 }
 int main (int argc, char *argv[])
 {
-	bool verbose = false;
-	int duration = 7, schedType = 0, enableUplink = false, enableDownlink=false, port=100,
-		enableRural = false, enableSuburban = false, enableUrban = false;
-	int numPtctUsers=0,numMonUsers=0,numCtrlUsers=0,numSMUsers=0, density = 0;
+	bool verbose = false, enableUplink = false, enableDownlink=false, enableRural = false, enableSuburban = false, enableUrban = false;
+	int duration = 7, schedType = 0, port=100, numAggregators=0;
+	int numPtctUsers=0,numMonUsers=0,numCtrlUsers=0,numSMUsers=0;
+	double compressionRatio=1.0;
 	double areaRadius = 0.56434; //kilometer
 
 
@@ -426,6 +426,9 @@ int main (int argc, char *argv[])
 	cmd.AddValue ("NS", "Number of nodes which have UL data.", numSMUsers);
 	cmd.AddValue ("DL", "Enable DL transmission?",enableDownlink);
 	cmd.AddValue ("UL", "Enable UL transmission?",enableUplink);
+	cmd.AddValue ("NAG", "Number of Aggregators.",numAggregators);
+	cmd.AddValue ("comp", "Aggregation Compression Ratio.",compressionRatio);
+	cmd.AddValue ("rad", "Cell Radius (km).",areaRadius);
 	cmd.AddValue ("RL", "Enable Rural area transmission?",enableRural);
 	cmd.AddValue ("SU", "Enable Suburban area transmission?",enableSuburban);
 	cmd.AddValue ("U", "Enable Urban area transmission?",enableUrban);
@@ -454,12 +457,64 @@ int main (int argc, char *argv[])
 	  break;
 	}
 
-	/*This is the field for defining common variables (the same for all applications)*/
+	//environment and number of nodes
+	int density;
+	double onTimeSMUL= 0.1;
+	double offTimeSMUL;
+	double dataRateKBSMUL = 1.0;  //UL data rate for each smart meter (kbps)
+	if (enableRural == true)
+	{
+		assert(enableUrban==false && enableSuburban==false);
+		numMonUsers = 5;
+		numCtrlUsers = 3;
+		numPtctUsers = 1;
+		density = 10;
+		numSMUsers = int(3.14/3.0 * areaRadius * areaRadius * density);
+		assert(MAX_USERS>=numSMUsers);
+	}
+	if (enableSuburban == true)
+	{
+		assert(enableUrban==false && enableRural==false);
+		numMonUsers = 11;
+		numCtrlUsers = 8;
+		numPtctUsers = 4;
+		density = 800;
+		numSMUsers = int(3.14/3.0 * areaRadius * areaRadius * density);
+		assert(MAX_USERS>=numSMUsers);
+	}
+
+	if (enableUrban == true)
+	{
+		assert(enableRural==false && enableSuburban==false);
+		numMonUsers = 27;
+		numCtrlUsers = 11;
+		numPtctUsers = 8;
+		density = 1200; //2000;
+		numSMUsers = int(3.14/3.0 * areaRadius * areaRadius * density);
+		assert(MAX_USERS>=numSMUsers);
+	}
+	if (numAggregators > 0)
+	{
+		onTimeSMUL *= int(numSMUsers/numAggregators);
+		assert(compressionRatio>=0.0 && compressionRatio<=1.0);
+		dataRateKBSMUL *= int(compressionRatio*numSMUsers/numAggregators);
+		numSMUsers = numAggregators;
+	}
+	offTimeSMUL = 0.1; //onTimeSMUL>=4.1?0.0:4.1-onTimeSMUL;
+
+	WimaxHelper wimax;
+
+	if (verbose)
+	{
+	  wimax.EnableLogComponents ();  // Turn on all wimax logging
+	}
+
+
+	/*This is the field for defining common variables (the same for all applications), e.g. BS*/
 	NodeContainer bsNodes;
 	bsNodes.Create (1);
 	int created_nodes=1;
 
-	WimaxHelper wimax;
 
 	NetDeviceContainer bsDevs;
 	bsDevs = wimax.Install (bsNodes, WimaxHelper::DEVICE_TYPE_BASE_STATION, WimaxHelper::SIMPLE_PHY_TYPE_OFDM, scheduler);
@@ -480,41 +535,9 @@ int main (int argc, char *argv[])
 	address.SetBase ("10.1.1.0", "255.255.255.0");
 	Ipv4InterfaceContainer BSinterface = address.Assign (bsDevs);
 
-	if (enableRural == true)
-	{
-		assert(enableUrban==false && enableSuburban==false);
-		numMonUsers = 5;
-		numCtrlUsers = 3;
-		numPtctUsers = 1;
-		density = 10;
-		numSMUsers = int(3.14/3.0 * areaRadius * areaRadius * density);
-	}
-	if (enableSuburban == true)
-	{
-		assert(enableUrban==false && enableRural==false);
-		numMonUsers = 11;
-		numCtrlUsers = 8;
-		numPtctUsers = 4;
-		density = 800;
-		numSMUsers = int(3.14/3.0 * areaRadius * areaRadius * density);
-	}
-	if (enableUrban == true)
-	{
-		assert(enableRural==false && enableSuburban==false);
-		numMonUsers = 27;
-		numCtrlUsers = 11;
-		numPtctUsers = 8;
-		density = 1200; //2000;
-		numSMUsers = int(3.14/3.0 * areaRadius * areaRadius * density);
-		assert(MAX_USERS>=numSMUsers);
-	}
 
-	if (verbose)
-	{
-	  wimax.EnableLogComponents ();  // Turn on all wimax logging
-	}
 
-	/*COMMON*/
+	/*COMMON part for UDP and TCP per application*/
 	NS_LOG_UNCOND("Common UDP Protection Setup.");
 	NodeContainer ssNodesPtct;
 	Ptr<SubscriberStationNetDevice> ssPtct[numPtctUsers];
@@ -561,7 +584,7 @@ int main (int argc, char *argv[])
 	}
 	/* END COMMON*/
 
-	/*------------------------------*/
+	/*-------------Traffic Generation (UL and then DL)-----------------*/
 	if (enableUplink)
 	{
 		//NodeConfigurationCommonSetup(wimax,5,stack,address,scheduler,ssNodes,ss,SSinterfaces);
@@ -599,9 +622,14 @@ int main (int argc, char *argv[])
 		appnumBeforeSMUL = bsNodes.Get(0)->GetNApplications();
 		if (numSMUsers > 0)
 		{
-			NS_LOG_UNCOND("Setting up UL TCP for smart metering.");
+			std::ostringstream onTimeSMULStr,offTimeSMULStr,dataRateKBSMULStr;
+			onTimeSMULStr << "ns3::ConstantRandomVariable[Constant=" << onTimeSMUL << "]";
+			offTimeSMULStr << "ns3::ConstantRandomVariable[Constant=" << offTimeSMUL << "]";
+			dataRateKBSMULStr << dataRateKBSMUL << "kb/s";
+			NS_LOG_UNCOND("Setting up UL TCP for smart metering, onTime: " << onTimeSMULStr.str() <<
+					", offTime: " << offTimeSMULStr.str() << ", dataRate: " << dataRateKBSMULStr.str());
 			port = Uplink_TCP_Traffic(wimax, port, numSMUsers, duration, BSinterface, SMinterfaceAdjacencyList, bsNodes, ssNodesSM, ssSM,
-					"ns3::ConstantRandomVariable[Constant=0.1]", "ns3::ConstantRandomVariable[Constant=4]", 3, ServiceFlow::SF_TYPE_BE, "1kb/s", 128);
+					onTimeSMULStr.str(), offTimeSMULStr.str(), 3, ServiceFlow::SF_TYPE_BE, dataRateKBSMULStr.str(), 128);
 		}
 		appnumAfterSMUL = bsNodes.Get(0)->GetNApplications();
 
@@ -654,17 +682,12 @@ int main (int argc, char *argv[])
   NS_LOG_UNCOND ("Starting simulation for " << numPtctUsers << " Protection Users, " << numMonUsers << " Monitoring Users, " <<
 		  numCtrlUsers << " Control Users, and " << numSMUsers << " Smart Meters (SM UL only)...");
   Simulator::Run ();
-
+  NS_LOG_UNCOND ("Ended simulation for " << numPtctUsers << " Protection Users, " << numMonUsers << " Monitoring Users, " <<
+  		  numCtrlUsers << " Control Users, and " << numSMUsers << " Smart Meters (SM UL only).");
 
   /******************************GET STATISTICS**********************************************************/
   Ptr<Node> myNode = bsNodes.Get(0);
   NS_LOG_UNCOND("There are a total of " << bsNodes.Get(0)->GetNApplications() << " applications installed on the BS.");
-//  for (unsigned int appnum=4; appnum < bsNodes.Get(0)->GetNApplications(); appnum++)
-//  {
-//	  Ptr<OnOffApplication> bsApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(bsNodes.Get(0)->GetApplication(appnum))));
-//	  for (int ff=0;ff<FLOW_NUM;ff++)
-//	  	  NS_LOG_UNCOND("app#" << appnum << ",flow#" << ff << ":" << bsApp->m_Sent[ff]);
-//  }
 
   //first get the number of sent packets:
   //udp for Protection DL:
@@ -672,9 +695,8 @@ int main (int argc, char *argv[])
   for (int appnum=appnumBeforePtctDL; appnum<appnumAfterPtctDL; appnum++)
   {
 	  Ptr<UdpClient> bsAppPtctDL = Ptr<UdpClient> (dynamic_cast<UdpClient *> (PeekPointer(bsNodes.Get(0)->GetApplication(appnum))));
-	  //NS_LOG_UNCOND(";;;;;;;;;;;;;;;;"<<bsAppPtctDL->m_Sent[6]<<";;;;;;;;;;;;;;;;");
 	  totalSentPtctDL[appnum-appnumBeforePtctDL] = bsAppPtctDL->m_Sent[6];
-	  NS_LOG_UNCOND("totalSentPtctDL[" << appnum-appnumBeforePtctDL << "," << appnum << "]=" <<  bsAppPtctDL->m_Sent[6] );
+	  //NS_LOG_UNCOND("totalSentPtctDL[" << appnum-appnumBeforePtctDL << "," << appnum << "]=" <<  bsAppPtctDL->m_Sent[6] );
   }
 
   //on-off for Control DL
@@ -683,7 +705,7 @@ int main (int argc, char *argv[])
   {
 	  Ptr<OnOffApplication> bsAppCtrlDL = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(bsNodes.Get(0)->GetApplication(appnum))));
 	  totalSentCtrlDL[appnum-appnumBeforeCtrlDL] = bsAppCtrlDL->m_Sent[5];
-	  NS_LOG_UNCOND("totalSentCtrlDL[" << appnum-appnumBeforeCtrlDL << "," << appnum << "]=" <<  bsAppCtrlDL->m_Sent[5] );
+	  //NS_LOG_UNCOND("totalSentCtrlDL[" << appnum-appnumBeforeCtrlDL << "," << appnum << "]=" <<  bsAppCtrlDL->m_Sent[5] );
   }
 
   //on-off for Monitoring DL
@@ -692,7 +714,7 @@ int main (int argc, char *argv[])
   {
 	  Ptr<OnOffApplication> bsAppMonDL = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(bsNodes.Get(0)->GetApplication(appnum))));
 	  totalSentMonDL[appnum-appnumBeforeMonDL] = bsAppMonDL->m_Sent[4];
-	  NS_LOG_UNCOND("totalSentMonDL[" << appnum-appnumBeforeMonDL << "," << appnum << "]=" <<  bsAppMonDL->m_Sent[4] );
+	  //NS_LOG_UNCOND("totalSentMonDL[" << appnum-appnumBeforeMonDL << "," << appnum << "]=" <<  bsAppMonDL->m_Sent[4] );
   }
 
   //on-off for SM DL
@@ -711,7 +733,7 @@ int main (int argc, char *argv[])
 	  Ptr<UdpClient> myApp = Ptr<UdpClient> (dynamic_cast<UdpClient *> (PeekPointer(ssNodesPtct.Get(j)->GetApplication(0))));
 	  totalSentPtctUL +=  myApp->m_Sent[2];
   }
-  NS_LOG_UNCOND("totalSentPtctUL (fid=2)=" << totalSentPtctUL);
+  //NS_LOG_UNCOND("totalSentPtctUL (fid=2)=" << totalSentPtctUL);
   //UDP for Monitoring UL (sum)
   int totalSentMonUL = 0;
   for (int j=0; j < numMonUsers; j++)
@@ -719,7 +741,7 @@ int main (int argc, char *argv[])
 	  Ptr<UdpClient> myApp = Ptr<UdpClient> (dynamic_cast<UdpClient *> (PeekPointer(ssNodesMonUL.Get(j)->GetApplication(0))));
 	  totalSentMonUL +=  myApp->m_Sent[0];
   }
-  NS_LOG_UNCOND("totalSentMonUL (fid=0)=" << totalSentMonUL);
+  //NS_LOG_UNCOND("totalSentMonUL (fid=0)=" << totalSentMonUL);
   //on-off for Control UL (sum)
   int totalSentCtrlUL = 0;
   for (int j=0; j < numCtrlUsers; j++)
@@ -755,91 +777,54 @@ int main (int argc, char *argv[])
 			  << myNode->Delays[i].ToDouble(Time::MS)/float(myNode->Recv[i]) << std::endl );
   }
 
-  NS_LOG_UNCOND("UDP DL Ptct:\nFlow Id\tSent\tRecv\tReliable Recv\tAvg. Delay\n");
-  for (int j=0; j<numPtctUsers; j++)
+  NS_LOG_UNCOND("TCP DL Mon:\nFlow Id\tSent\tRecv\tReliable Recv\tAvg. Delay\n");
+  int totalRecvMonDL = 0, totalRelRecvMonDL = 0, totalSentMonDLAll=0;
+  double totalDelaysMonDL = 0.0;
+  for (int j=0; j<numMonUsers; j++)
   {
-	  NS_LOG_UNCOND("Protection Node#" << j << "--");
-	  Ptr<Node> myNode = ssNodesPtct.Get(j);
-	  //Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
-	  for (int i=0; i< FLOW_NUM; i++)
-	  {
-		  if (i==6)
-		  NS_LOG_UNCOND(i << "\t" << totalSentPtctDL[j] << "\t" << myNode->Recv[i] << "\t" <<  myNode->reliable_received[i] << "\t\t"
-				  << myNode->Delays[i].ToDouble(Time::MS)/float(myNode->Recv[i]) << std::endl );
-
-	  }
+  //NS_LOG_UNCOND("Control Node#" << j << "--");
+	  Ptr<Node> myNode = ssNodesMonDL.Get(j);
+	  totalRecvMonDL += myNode->Recv[4];
+	  totalRelRecvMonDL += myNode->reliable_received[4];
+	  totalDelaysMonDL += myNode->Delays[4].ToDouble(Time::MS);
+	  totalSentMonDLAll += totalSentMonDL[j];
   }
+  //Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
+  NS_LOG_UNCOND(4 << "\t" << totalSentMonDLAll << "\t" << totalRecvMonDL << "\t" <<  totalRelRecvMonDL << "\t\t"
+		  << totalDelaysMonDL/float(totalRecvMonDL) << std::endl );
 
   NS_LOG_UNCOND("TCP DL Ctrl:\nFlow Id\tSent\tRecv\tReliable Recv\tAvg. Delay\n");
+  int totalRecvCtrlDL = 0, totalRelRecvCtrlDL = 0, totalSentCtrlDLAll=0;
+  double totalDelaysCtrlDL = 0.0;
   for (int j=0; j<numCtrlUsers; j++)
   {
-	  NS_LOG_UNCOND("Control Node#" << j << "--");
+  //NS_LOG_UNCOND("Control Node#" << j << "--");
 	  Ptr<Node> myNode = ssNodesCtrl.Get(j);
-	  //Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
-	  for (int i=0; i< FLOW_NUM; i++)
-	  {
-		  if (i==5)
-		  NS_LOG_UNCOND(i << "\t" << totalSentCtrlDL[j] << "\t" << myNode->Recv[i] << "\t" <<  myNode->reliable_received[i] << "\t\t"
-				  << myNode->Delays[i].ToDouble(Time::MS)/float(myNode->Recv[i]) << std::endl );
-
-	  }
+	  totalRecvCtrlDL += myNode->Recv[5];
+	  totalRelRecvCtrlDL += myNode->reliable_received[5];
+	  totalDelaysCtrlDL += myNode->Delays[5].ToDouble(Time::MS);
+	  totalSentCtrlDLAll += totalSentCtrlDL[j];
   }
+  //Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
+  NS_LOG_UNCOND(5 << "\t" << totalSentCtrlDLAll << "\t" << totalRecvCtrlDL << "\t" <<  totalRelRecvCtrlDL << "\t\t"
+		  << totalDelaysCtrlDL/float(totalRecvCtrlDL) << std::endl );
 
-  NS_LOG_UNCOND("TCP DL Mon:\nFlow Id\tSent\tRecv\tReliable Recv\tAvg. Delay\n");
-   for (int j=0; j<numMonUsers; j++)
-   {
- 	  NS_LOG_UNCOND("Monitoring Node#" << j << "--");
- 	  Ptr<Node> myNode = ssNodesMonDL.Get(j);
- 	  //Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
- 	  for (int i=0; i< FLOW_NUM; i++)
- 	  {
- 		  if (i==4)
- 		  NS_LOG_UNCOND(i << "\t" << totalSentMonDL[j] << "\t" << myNode->Recv[i] << "\t" <<  myNode->reliable_received[i] << "\t\t"
- 				  << myNode->Delays[i].ToDouble(Time::MS)/float(myNode->Recv[i]) << std::endl );
 
- 	  }
-   }
-
-//  NS_LOG_UNCOND("TCP DL SM:\nFlow Id\tSent\tRecv\tReliable Received\tAvg. Delay\n");
-//   for (int j=0; j<numSMUsers; j++)
-//   {
-// 	  NS_LOG_UNCOND("Smart Metering Node#" << j << "--");
-// 	  Ptr<Node> myNode = ssNodesSM.Get(j);
-// 	  Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
-// 	  for (int i=0; i< FLOW_NUM; i++)
-// 	  {
-// 		  if (i==7)
-// 		  NS_LOG_UNCOND(i << "\t" << totalSentSMDL[j] << "\t" << myNode->Recv[i] << "\t" <<  myNode->reliable_received[i] << "\t\t"
-// 				  << myNode->Delays[i].ToDouble(Time::MS)/float(myNode->Recv[i]) << std::endl );
-//
-// 	  }
-//    }
-
-//   NS_LOG_UNCOND("UDP Protection:\nFlow Id\tSent\tRecv\tReliable Received\tAvg. Delay\n");
-//   for (int j=0; j<numPtctUsers; j++)
-//   {
-//	   NS_LOG_UNCOND("\n--Protection Node#" << j << "--\n");
-//	   for (int i=0; i< FLOW_NUM; i++)
-//	   {
-//		   //udpServerUL[j].GetServer()->
-//		   if (i==2)
-//		   {
-//			  NS_LOG_UNCOND (i << "\t" << /*Sent[i] <<*/ "\t" << udpServerUL[i].GetServer()->Recv[i] << "\t" <<  udpServerUL[j].GetServer()->reliable_received[i] << "\t\t"
-//					   << udpServerUL[j].GetServer()->Delays[i].ToDouble(Time::MS)/float(udpServerUL[j].GetServer()->Recv[i]) << std::endl ) ;
-//		   }
-//	   }
-//   }
-
-//  //log: table summary
-//  NS_LOG_UNCOND("Flow Id\tSent\tRecv\tReliable Received\tAvg. Delay\n");
-//  for (int i=0; i< FLOW_NUM; i++)
-//  {
-//	 //if (Recv[i] != 0)
-//
-//	 udpServerUL[i].GetServer()->Delays
-//	NS_LOG_UNCOND (i << "\t" << udpClientUL[i].Sent[i] << "\t" << udpServerUL[i].    .Recv[i] << "\t" <<  udpServerUL.reliable_received[i] << "\t\t"
-//  << udpServerUL.Delays[i].ToDouble(Time::MS)/float(udpServerUL.Recv[i]) << std::endl ) ;
-//  }
+  NS_LOG_UNCOND("UDP DL Ptct:\nFlow Id\tSent\tRecv\tReliable Recv\tAvg. Delay\n");
+  int totalRecvPtctDL = 0, totalRelRecvPtctDL = 0, totalSentPtctDLAll=0;
+  double totalDelaysPtctDL = 0.0;
+  for (int j=0; j<numPtctUsers; j++)
+  {
+  //NS_LOG_UNCOND("Control Node#" << j << "--");
+	  Ptr<Node> myNode = ssNodesPtct.Get(j);
+	  totalRecvPtctDL += myNode->Recv[6];
+	  totalRelRecvPtctDL += myNode->reliable_received[6];
+	  totalDelaysPtctDL += myNode->Delays[6].ToDouble(Time::MS);
+	  totalSentPtctDLAll+= totalSentPtctDL[j];
+  }
+  //Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
+  NS_LOG_UNCOND(6 << "\t" << totalSentPtctDLAll << "\t" << totalRecvPtctDL << "\t" <<  totalRelRecvPtctDL << "\t\t"
+		  << totalDelaysPtctDL/float(totalRecvPtctDL) << std::endl );
 
 //  //cleanup
 //  for (int i = 0; i < numUsers; i++)
