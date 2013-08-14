@@ -42,9 +42,6 @@
 //       | SS1 |
 //       +-----+
 
-// July 5: Modified for N users (SS) send to base station (BS). No Downlink yet.
-//
-
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/applications-module.h"
@@ -60,7 +57,7 @@
 #include <iostream>
 #include <sstream>
 
-#define MAX_USERS 1205
+#define MAX_USERS 3005
 NS_LOG_COMPONENT_DEFINE ("WimaxSimpleExample");
 
 
@@ -320,7 +317,7 @@ int Downlink_TCP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration,
 }
 
 int Uplink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration, Ipv4InterfaceContainer BSinterface, Ipv4InterfaceContainer SSinterfaces,
-		NodeContainer bsNodes, NodeContainer ssNodes , Ptr<SubscriberStationNetDevice> ss[], int fid, uint32_t pktSize)
+		NodeContainer bsNodes, NodeContainer ssNodes , Ptr<SubscriberStationNetDevice> ss[], double interval, int fid, uint32_t pktSize)
 {
 	int port1 = port;
 	for (int i = 0; i < numUsers; i++)
@@ -332,7 +329,7 @@ int Uplink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration, I
 		  serverAppsUL[i].Stop (Seconds (duration));
 		  udpClientUL[i] = UdpClientHelper (BSinterface.GetAddress (0), port);
 		  udpClientUL[i].SetAttribute ("MaxPackets", UintegerValue (1200));
-		  udpClientUL[i].SetAttribute ("Interval", TimeValue (Seconds (2)));//0.01
+		  udpClientUL[i].SetAttribute ("Interval", TimeValue (Seconds (interval)));//0.01
 		  udpClientUL[i].SetAttribute("FlowId", UintegerValue(fid));
 		  udpClientUL[i].SetAttribute ("PacketSize", UintegerValue (pktSize));
 		  clientAppsUL[i] = udpClientUL[i].Install (ssNodes.Get(i));
@@ -363,7 +360,7 @@ int Uplink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration, I
 }
 
 int Downlink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration, Ipv4InterfaceContainer SSinterfaces,
-		NodeContainer bsNodes, NodeContainer ssNodes , Ptr<SubscriberStationNetDevice> ss[])
+		NodeContainer bsNodes, NodeContainer ssNodes , Ptr<SubscriberStationNetDevice> ss[], int fid, uint32_t pktSize)
 {
 	int port1 = port;
 	for (int i = 0; i < numUsers; i++)
@@ -378,10 +375,12 @@ int Downlink_UDP_Traffic(WimaxHelper &wimax, int port,int numUsers,int duration,
 		udpClientDL[i] = UdpClientHelper (SSinterfaces.GetAddress (i), port);
 		udpClientDL[i].SetAttribute ("MaxPackets", UintegerValue (1200));
 		udpClientDL[i].SetAttribute ("Interval", TimeValue (Seconds (2)));//0.01
-		udpClientDL[i].SetAttribute("FlowId", UintegerValue(6));
-		udpClientDL[i].SetAttribute ("PacketSize", UintegerValue (128));
+		udpClientDL[i].SetAttribute("FlowId", UintegerValue(fid));
+		udpClientDL[i].SetAttribute ("PacketSize", UintegerValue (pktSize));
 		clientAppsDL[i] = udpClientDL[i].Install (bsNodes.Get(0));
-		clientAppsDL[i].Start (Seconds (1.5));
+		Ptr<UniformRandomVariable> uv = CreateObject<UniformRandomVariable> ();
+		//NS_LOG_UNCOND("rrrrrrrrrrrrrrrrrr:" << uv->GetValue());
+		clientAppsDL[i].Start (Seconds (1.5));//+3*uv->GetValue()
 		clientAppsDL[i].Stop (Seconds (duration));
 	}
 
@@ -489,7 +488,7 @@ int main (int argc, char *argv[])
 		numMonUsers = 27;
 		numCtrlUsers = 11;
 		numPtctUsers = 8;
-		density = 1200; //2000;
+		density = 9000; //1200; //2000;
 		numSMUsers = int(3.14/3.0 * areaRadius * areaRadius * density);
 		assert(MAX_USERS>=numSMUsers);
 	}
@@ -500,7 +499,7 @@ int main (int argc, char *argv[])
 		dataRateKBSMUL *= int(compressionRatio*numSMUsers/numAggregators);
 		numSMUsers = numAggregators;
 	}
-	offTimeSMUL = 0.1; //onTimeSMUL>=4.1?0.0:4.1-onTimeSMUL;
+	offTimeSMUL = onTimeSMUL>=4.1?0.0:4.1-onTimeSMUL;
 
 	WimaxHelper wimax;
 
@@ -574,13 +573,27 @@ int main (int argc, char *argv[])
 		NodeConfigurationCommonSetupTCP(wimax,numCtrlUsers,created_nodes,areaRadius,stack,address,scheduler,bsDevs,bsNodes,ssNodesCtrl,ssCtrl,CtrlinterfaceAdjacencyList);
 	}
 
-	NS_LOG_UNCOND("Common TCP Smart Meters Setup.");
 	NodeContainer ssNodesSM;
 	Ptr<SubscriberStationNetDevice> ssSM[numSMUsers];
 	std::vector<Ipv4InterfaceContainer> SMinterfaceAdjacencyList (numSMUsers);
-	if (numSMUsers > 0)
+	NodeContainer ssNodesSMUL;
+	Ptr<SubscriberStationNetDevice> ssSMUL[numMonUsers];
+	Ipv4InterfaceContainer SSinterfacesSMUL;
+	if (numAggregators ==0)
 	{
-		NodeConfigurationCommonSetupTCP(wimax,numSMUsers,created_nodes,areaRadius,stack,address,scheduler,bsDevs,bsNodes,ssNodesSM,ssSM,SMinterfaceAdjacencyList);
+		NS_LOG_UNCOND("Common TCP Smart Meters Setup.");
+		if (numSMUsers > 0)
+		{
+			NodeConfigurationCommonSetupTCP(wimax,numSMUsers,created_nodes,areaRadius,stack,address,scheduler,bsDevs,bsNodes,ssNodesSM,ssSM,SMinterfaceAdjacencyList);
+		}
+	}
+	else
+	{
+		NS_LOG_UNCOND("Common UDP Smart Meters (UL Agg.) Setup.");
+		if (numMonUsers > 0)
+		{
+			NodeConfigurationCommonSetupUDP(wimax,numSMUsers,created_nodes,areaRadius,stack,address,scheduler,ssNodesSMUL,ssSMUL,SSinterfacesSMUL);
+		}
 	}
 	/* END COMMON*/
 
@@ -594,7 +607,7 @@ int main (int argc, char *argv[])
 		if (numPtctUsers > 0)
 		{
 			NS_LOG_UNCOND("Setting up UL UDP for Protection.");
-			port = Uplink_UDP_Traffic(wimax, port, numPtctUsers, duration, BSinterface, SSinterfacesPtct, bsNodes, ssNodesPtct, ssPtct, 2, 128);
+			port = Uplink_UDP_Traffic(wimax, port, numPtctUsers, duration, BSinterface, SSinterfacesPtct, bsNodes, ssNodesPtct, ssPtct,2.0, 2, 128);
 		}
 		appnumAfterPtctUL = bsNodes.Get(0)->GetNApplications();
 
@@ -603,7 +616,7 @@ int main (int argc, char *argv[])
 		if (numMonUsers > 0)
 		{
 			NS_LOG_UNCOND("Setting up UL UDP for Monitoring.");
-			port = Uplink_UDP_Traffic(wimax, port, numMonUsers, duration, BSinterface, SSinterfacesMonUL, bsNodes, ssNodesMonUL, ssMonUL, 0, 256);
+			port = Uplink_UDP_Traffic(wimax, port, numMonUsers, duration, BSinterface, SSinterfacesMonUL, bsNodes, ssNodesMonUL, ssMonUL,2.0, 0, 256);
 		}
 		appnumAfterMonUL = bsNodes.Get(0)->GetNApplications();
 
@@ -622,14 +635,23 @@ int main (int argc, char *argv[])
 		appnumBeforeSMUL = bsNodes.Get(0)->GetNApplications();
 		if (numSMUsers > 0)
 		{
-			std::ostringstream onTimeSMULStr,offTimeSMULStr,dataRateKBSMULStr;
-			onTimeSMULStr << "ns3::ConstantRandomVariable[Constant=" << onTimeSMUL << "]";
-			offTimeSMULStr << "ns3::ConstantRandomVariable[Constant=" << offTimeSMUL << "]";
-			dataRateKBSMULStr << dataRateKBSMUL << "kb/s";
-			NS_LOG_UNCOND("Setting up UL TCP for smart metering, onTime: " << onTimeSMULStr.str() <<
-					", offTime: " << offTimeSMULStr.str() << ", dataRate: " << dataRateKBSMULStr.str());
-			port = Uplink_TCP_Traffic(wimax, port, numSMUsers, duration, BSinterface, SMinterfaceAdjacencyList, bsNodes, ssNodesSM, ssSM,
-					onTimeSMULStr.str(), offTimeSMULStr.str(), 3, ServiceFlow::SF_TYPE_BE, dataRateKBSMULStr.str(), 128);
+			if (numAggregators ==0)
+			{
+				std::ostringstream onTimeSMULStr,offTimeSMULStr,dataRateKBSMULStr;
+				onTimeSMULStr << "ns3::ConstantRandomVariable[Constant=" << onTimeSMUL << "]";
+				offTimeSMULStr << "ns3::ConstantRandomVariable[Constant=" << offTimeSMUL << "]";
+				dataRateKBSMULStr << dataRateKBSMUL << "kb/s";
+				NS_LOG_UNCOND("Setting up UL TCP for smart metering, onTime: " << onTimeSMULStr.str() <<
+						", offTime: " << offTimeSMULStr.str() << ", dataRate: " << dataRateKBSMULStr.str());
+				port = Uplink_TCP_Traffic(wimax, port, numSMUsers, duration, BSinterface, SMinterfaceAdjacencyList, bsNodes, ssNodesSM, ssSM,
+						onTimeSMULStr.str(), offTimeSMULStr.str(), 3, ServiceFlow::SF_TYPE_RTPS, dataRateKBSMULStr.str(), 128); //SF_TYPE_BE
+			}
+			else
+			{
+				NS_LOG_UNCOND("Setting up UL UDP for smart metering (aggregation), dataRate: " << dataRateKBSMUL);
+				port = Uplink_UDP_Traffic(wimax, port, numSMUsers, duration, BSinterface, SSinterfacesSMUL, bsNodes, ssNodesSMUL, ssSMUL,128.0/dataRateKBSMUL, 3, 128);
+
+			}
 		}
 		appnumAfterSMUL = bsNodes.Get(0)->GetNApplications();
 
@@ -641,7 +663,7 @@ int main (int argc, char *argv[])
 		if (numPtctUsers > 0)
 		{
 			NS_LOG_UNCOND("Setting up DL UDP for Protection.");
-			port = Downlink_UDP_Traffic(wimax, port, numPtctUsers, duration, SSinterfacesPtct, bsNodes, ssNodesPtct, ssPtct);
+			port = Downlink_UDP_Traffic(wimax, port, numPtctUsers, duration, SSinterfacesPtct, bsNodes, ssNodesPtct, ssPtct, 6, 128);
 		}
 		appnumAfterPtctDL = bsNodes.Get(0)->GetNApplications();
 
@@ -667,23 +689,25 @@ int main (int argc, char *argv[])
 		}
 		appnumAfterCtrlDL = bsNodes.Get(0)->GetNApplications();
 
-		//SmartMetering is TCP:
+//		//SmartMetering is TCP:
 //		appnumBeforeSMDL = bsNodes.Get(0)->GetNApplications();
 //		if (numSMUsers > 0)
 //		{
 //			NS_LOG_UNCOND("Setting up DL TCP for smart metering.");
-//			port = Downlink_TCP_Traffic(wimax, port, numSMUsers, duration, BSinterface, SMinterfaceAdjacencyList, bsNodes, ssNodesSM, ssSM,
+//			port = Downlink_TCP_Traffic(wimax, port, numSMUsers, duration, BSinterface, SMDLinterfaceAdjacencyList, bsNodes, ssNodesSMDL, ssSMDL,
 //					"ns3::ConstantRandomVariable[Constant=0.1]", "ns3::ConstantRandomVariable[Constant=4]", 7, ServiceFlow::SF_TYPE_BE, "50b/s", 128);
 //		}
-//		appnumAfterDL = bsNodes.Get(0)->GetNApplications();
+//		appnumAfterSMDL = bsNodes.Get(0)->GetNApplications();
 	}
   //run
   Simulator::Stop (Seconds (duration + 0.1));
   NS_LOG_UNCOND ("Starting simulation for " << numPtctUsers << " Protection Users, " << numMonUsers << " Monitoring Users, " <<
-		  numCtrlUsers << " Control Users, and " << numSMUsers << " Smart Meters (SM UL only)...");
+		  numCtrlUsers << " Control Users, and " << numSMUsers << " Smart Meters (SM UL only rate " << dataRateKBSMUL  << "kbps)...");
+  NS_LOG_UNCOND ("UL/DL/Agg = "<<enableUplink<<enableDownlink<<numAggregators);
   Simulator::Run ();
-  NS_LOG_UNCOND ("Ended simulation for " << numPtctUsers << " Protection Users, " << numMonUsers << " Monitoring Users, " <<
-  		  numCtrlUsers << " Control Users, and " << numSMUsers << " Smart Meters (SM UL only).");
+  NS_LOG_UNCOND ("Printing statistics for " << numPtctUsers << " Protection Users, " << numMonUsers << " Monitoring Users, " <<
+		  numCtrlUsers << " Control Users, and " << numSMUsers << " Smart Meters (SM UL only rate " << dataRateKBSMUL  << "kbps)...");
+  NS_LOG_UNCOND ("UL/DL/Agg = "<<enableUplink<<enableDownlink<<numAggregators);
 
   /******************************GET STATISTICS**********************************************************/
   Ptr<Node> myNode = bsNodes.Get(0);
@@ -696,7 +720,7 @@ int main (int argc, char *argv[])
   {
 	  Ptr<UdpClient> bsAppPtctDL = Ptr<UdpClient> (dynamic_cast<UdpClient *> (PeekPointer(bsNodes.Get(0)->GetApplication(appnum))));
 	  totalSentPtctDL[appnum-appnumBeforePtctDL] = bsAppPtctDL->m_Sent[6];
-	  //NS_LOG_UNCOND("totalSentPtctDL[" << appnum-appnumBeforePtctDL << "," << appnum << "]=" <<  bsAppPtctDL->m_Sent[6] );
+	  NS_LOG_UNCOND("totalSentPtctDL[" << appnum-appnumBeforePtctDL << "," << appnum << "]=" <<  bsAppPtctDL->m_Sent[6] );
   }
 
   //on-off for Control DL
@@ -705,7 +729,7 @@ int main (int argc, char *argv[])
   {
 	  Ptr<OnOffApplication> bsAppCtrlDL = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(bsNodes.Get(0)->GetApplication(appnum))));
 	  totalSentCtrlDL[appnum-appnumBeforeCtrlDL] = bsAppCtrlDL->m_Sent[5];
-	  //NS_LOG_UNCOND("totalSentCtrlDL[" << appnum-appnumBeforeCtrlDL << "," << appnum << "]=" <<  bsAppCtrlDL->m_Sent[5] );
+	  NS_LOG_UNCOND("totalSentCtrlDL[" << appnum-appnumBeforeCtrlDL << "," << appnum << "]=" <<  bsAppCtrlDL->m_Sent[5] );
   }
 
   //on-off for Monitoring DL
@@ -714,11 +738,19 @@ int main (int argc, char *argv[])
   {
 	  Ptr<OnOffApplication> bsAppMonDL = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(bsNodes.Get(0)->GetApplication(appnum))));
 	  totalSentMonDL[appnum-appnumBeforeMonDL] = bsAppMonDL->m_Sent[4];
-	  //NS_LOG_UNCOND("totalSentMonDL[" << appnum-appnumBeforeMonDL << "," << appnum << "]=" <<  bsAppMonDL->m_Sent[4] );
+	  NS_LOG_UNCOND("totalSentMonDL[" << appnum-appnumBeforeMonDL << "," << appnum << "]=" <<  bsAppMonDL->m_Sent[4] );
   }
 
   //on-off for SM DL
 //  int totalSentSMDL[MAX_USERS];
+//  for (int appnum=appnumBeforeSMDL; appnum<appnumAfterSMDL; appnum++)
+//  {
+//	  Ptr<OnOffApplication> bsAppSMDL = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(bsNodes.Get(0)->GetApplication(appnum))));
+//	  totalSentSMDL[appnum-appnumBeforeSMDL] = bsAppSMDL->m_Sent[7];
+//	  NS_LOG_UNCOND("totalSentSMDL[" << appnum-appnumBeforeSMDL << "," << appnum << "]=" <<  bsAppSMDL->m_Sent[4] );
+//  }
+
+  //  int totalSentSMDL[MAX_USERS];
 //  for (int appnum=numPtctUsers+numMonUsers+2*numCtrlUsers+numMonUsers; appnum<numPtctUsers+numMonUsers+2*numCtrlUsers+numMonUsers+numSMUsers; appnum++)
 //  {
 //	  Ptr<OnOffApplication> bsAppSMDL = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(bsNodes.Get(0)->GetApplication(appnum))));
@@ -730,6 +762,7 @@ int main (int argc, char *argv[])
   int totalSentPtctUL = 0;
   for (int j=0; j < numPtctUsers; j++)
   {
+	  //NS_LOG_UNCOND("????????");
 	  Ptr<UdpClient> myApp = Ptr<UdpClient> (dynamic_cast<UdpClient *> (PeekPointer(ssNodesPtct.Get(j)->GetApplication(0))));
 	  totalSentPtctUL +=  myApp->m_Sent[2];
   }
@@ -753,8 +786,16 @@ int main (int argc, char *argv[])
   int totalSentSMUL = 0;
   for (int j=0; j < numSMUsers; j++)
   {
-	  Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(ssNodesSM.Get(j)->GetApplication(0))));
-	  totalSentSMUL += myApp->m_Sent[3];
+	  if (numAggregators==0)
+	  {
+		  Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(ssNodesSM.Get(j)->GetApplication(0))));
+		  totalSentSMUL += myApp->m_Sent[3];
+	  }
+	  else
+	  {
+		  Ptr<UdpClient> myApp = Ptr<UdpClient> (dynamic_cast<UdpClient *> (PeekPointer(ssNodesSMUL.Get(j)->GetApplication(0))));
+		  totalSentSMUL += myApp->m_Sent[3];
+	  }
   }
 
   NS_LOG_UNCOND("All UL flows:\nFlow Id\tSent\tRecv\tReliable Recv\tAvg. Delay\n");
@@ -825,6 +866,22 @@ int main (int argc, char *argv[])
   //Ptr<OnOffApplication> myApp = Ptr<OnOffApplication> (dynamic_cast<OnOffApplication *> (PeekPointer(myNode->GetApplication(0))));
   NS_LOG_UNCOND(6 << "\t" << totalSentPtctDLAll << "\t" << totalRecvPtctDL << "\t" <<  totalRelRecvPtctDL << "\t\t"
 		  << totalDelaysPtctDL/float(totalRecvPtctDL) << std::endl );
+
+//  NS_LOG_UNCOND("TCP DL SM:\nFlow Id\tSent\tRecv\tReliable Recv\tAvg. Delay\n");
+//  int totalRecvSMDL = 0, totalRelRecvSMDL = 0, totalSentSMDLAll=0;
+//  double totalDelaysSMDL = 0.0;
+//  for (int j=0; j<numSMUsers; j++)
+//  {
+//  //NS_LOG_UNCOND("Control Node#" << j << "--");
+//	  Ptr<Node> myNode = ssNodesSMDL.Get(j);
+//	  totalRecvSMDL += myNode->Recv[7];
+//	  totalRelRecvSMDL += myNode->reliable_received[7];
+//	  totalDelaysSMDL += myNode->Delays[7].ToDouble(Time::MS);
+//	  totalSentSMDLAll += totalSentSMDL[j];
+//  }
+
+//  NS_LOG_UNCOND(7 << "\t" << totalSentSMDLAll << "\t" << totalRecvSMDL << "\t" <<  totalRelRecvSMDL << "\t\t"
+//		  << totalDelaysSMDL/float(totalRecvSMDL) << std::endl );
 
 //  //cleanup
 //  for (int i = 0; i < numUsers; i++)
